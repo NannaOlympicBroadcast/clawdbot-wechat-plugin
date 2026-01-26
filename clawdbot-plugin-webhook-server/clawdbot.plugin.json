@@ -1,0 +1,37 @@
+{
+    "$schema": "https://docs.clawd.bot/schemas/plugin.json",
+    "id": "webhook-server",
+    "name": "Webhook Server",
+    "version": "1.0.0",
+    "description": "Exposes a webhook HTTP server for receiving external messages and triggering agent tasks",
+    "author": "",
+    "license": "MIT",
+    "main": "dist/index.js",
+    "configSchema": {
+        "type": "object",
+        "properties": {
+            "port": {
+                "type": "number",
+                "default": 8765,
+                "description": "Port number for the webhook server"
+            },
+            "host": {
+                "type": "string",
+                "default": "0.0.0.0",
+                "description": "Host address to bind to"
+            },
+            "authToken": {
+                "type": "string",
+                "description": "Authentication token for incoming requests (Bearer token)"
+            },
+            "timeout": {
+                "type": "number",
+                "default": 300000,
+                "description": "Maximum time (ms) to wait for agent task completion"
+            }
+        },
+        "required": [
+            "authToken"
+        ]
+    }
+}

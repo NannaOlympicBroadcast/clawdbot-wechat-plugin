@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  bridge:
+    build: .
+    container_name: clawdbot-wechat-bridge
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+      - WECHAT_APPID=${WECHAT_APPID}
+      - WECHAT_APPSECRET=${WECHAT_APPSECRET}
+      - WECHAT_TOKEN=${WECHAT_TOKEN}
+      - WECHAT_ENCODING_AES_KEY=${WECHAT_ENCODING_AES_KEY:-}
+      - REDIS_URL=redis://redis:6379
+      - BRIDGE_BASE_URL=${BRIDGE_BASE_URL}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    depends_on:
+      - redis
+    networks:
+      - bridge-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: clawdbot-wechat-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - bridge-network
+
+volumes:
+  redis-data:
+
+networks:
+  bridge-network:
+    driver: bridge
