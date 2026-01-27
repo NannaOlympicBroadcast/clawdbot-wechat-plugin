@@ -3,17 +3,23 @@ import { wechatRoutes } from './routes/wechat.js';
 import { callbackRoutes } from './routes/callback.js';
 
 export function buildApp(): FastifyInstance {
+    const isDevelopment = process.env.NODE_ENV === 'development';
+
     const app = Fastify({
-        logger: {
-            level: process.env.LOG_LEVEL || 'info',
-            transport: {
-                target: 'pino-pretty',
-                options: {
-                    translateTime: 'HH:MM:ss Z',
-                    ignore: 'pid,hostname',
+        logger: isDevelopment
+            ? {
+                level: process.env.LOG_LEVEL || 'info',
+                transport: {
+                    target: 'pino-pretty',
+                    options: {
+                        translateTime: 'HH:MM:ss Z',
+                        ignore: 'pid,hostname',
+                    },
                 },
+            }
+            : {
+                level: process.env.LOG_LEVEL || 'info',
             },
-        },
     });
 
     // Register content type parser for XML
