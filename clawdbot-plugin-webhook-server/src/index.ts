@@ -230,16 +230,49 @@ interface ChatRpcResult {
 }
 
 /**
- * Extended API type to handle dynamic properties
+ * Extended API type with runtime helpers (based on Zalo plugin pattern)
  */
 type ExtendedPluginApi = ClawdbotPluginApi & {
-    runtime?: {
-        agent?: {
-            chat?: (options: { message: string; conversationId?: string }) => Promise<{ text: string; model?: string }>;
-        };
-    };
+    runtime?: PluginRuntime;
     callRpc?: (method: string, params: Record<string, unknown>) => Promise<unknown>;
 };
+
+/**
+ * Plugin Runtime type (based on Zalo's getZaloRuntime pattern)
+ */
+interface PluginRuntime {
+    channel?: {
+        reply?: {
+            dispatchReplyWithBufferedBlockDispatcher?: (params: {
+                ctx: Record<string, unknown>;
+                cfg: Record<string, unknown>;
+                dispatcherOptions: {
+                    deliver: (payload: { text?: string }) => Promise<void>;
+                    onError: (err: unknown, info: { kind: string }) => void;
+                };
+            }) => Promise<void>;
+            resolveEnvelopeFormatOptions?: (cfg: Record<string, unknown>) => unknown;
+            formatAgentEnvelope?: (params: Record<string, unknown>) => string;
+            finalizeInboundContext?: (params: Record<string, unknown>) => Record<string, unknown>;
+        };
+        session?: {
+            resolveStorePath?: (store: unknown, params: { agentId?: string }) => string;
+            recordInboundSession?: (params: Record<string, unknown>) => Promise<void>;
+        };
+        routing?: {
+            resolveAgentRoute?: (params: Record<string, unknown>) => { agentId?: string; sessionKey: string; accountId?: string };
+        };
+    };
+    agent?: {
+        chat?: (options: { message: string; conversationId?: string }) => Promise<{ text: string; model?: string }>;
+        invoke?: (options: { input: string; ctx?: Record<string, unknown> }) => Promise<{ output: string }>;
+    };
+    [key: string]: unknown;
+}
+
+// Store plugin runtime globally for webhook handlers
+let pluginRuntime: PluginRuntime | null = null;
+let pluginConfig: PluginConfig | null = null;
 
 /**
  * Call Clawdbot's agent via available API methods
@@ -254,11 +287,63 @@ async function callChatRpc(
     }
 ): Promise<ChatRpcResult> {
     const extApi = api as ExtendedPluginApi;
+    const runtime = extApi.runtime;
 
     api.logger.info(`Sending message to agent: ${options.message.slice(0, 50)}...`);
-    api.logger.debug(`Available API methods: ${Object.keys(api).join(', ')}`);
 
-    // Method 1: Try api.chat.send if available
+    // Log runtime structure for debugging
+    if (runtime) {
+        const runtimeKeys = Object.keys(runtime);
+        api.logger.info(`Runtime structure: ${runtimeKeys.join(', ')}`);
+
+        // Deep explore runtime.channel if exists
+        if (runtime.channel) {
+            api.logger.info(`Runtime.channel keys: ${Object.keys(runtime.channel).join(', ')}`);
+        }
+
+        // Check for agent methods
+        if (runtime.agent) {
+            api.logger.info(`Runtime.agent keys: ${Object.keys(runtime.agent).join(', ')}`);
+        }
+    }
+
+    // Method 1: Try runtime.agent.invoke if available (simplest approach)
+    if (runtime?.agent?.invoke && typeof runtime.agent.invoke === 'function') {
+        try {
+            api.logger.info('Using runtime.agent.invoke method');
+            const result = await runtime.agent.invoke({
+                input: options.message,
+                ctx: {
+                    conversationId: options.conversationId || 'webhook-default',
+                    ...options.metadata,
+                },
+            });
+            return {
+                text: result.output || 'No response',
+            };
+        } catch (error) {
+            api.logger.warn(`runtime.agent.invoke failed: ${error}`);
+        }
+    }
+
+    // Method 2: Try runtime.agent.chat if available
+    if (runtime?.agent?.chat && typeof runtime.agent.chat === 'function') {
+        try {
+            api.logger.info('Using runtime.agent.chat method');
+            const result = await runtime.agent.chat({
+                message: options.message,
+                conversationId: options.conversationId || 'webhook-default',
+            });
+            return {
+                text: result.text || 'No response',
+                model: result.model,
+            };
+        } catch (error) {
+            api.logger.warn(`runtime.agent.chat failed: ${error}`);
+        }
+    }
+
+    // Method 3: Try api.chat.send if available
     if (api.chat && typeof api.chat.send === 'function') {
         try {
             api.logger.info('Using api.chat.send method');
@@ -276,42 +361,43 @@ async function callChatRpc(
         }
     }
 
-    // Method 2: Try api.runtime.agent.chat if available
-    if (extApi.runtime?.agent?.chat && typeof extApi.runtime.agent.chat === 'function') {
+    // Method 4: Use channel dispatch pattern (like Zalo)
+    if (runtime?.channel?.reply?.dispatchReplyWithBufferedBlockDispatcher) {
         try {
-            api.logger.info('Using api.runtime.agent.chat method');
-            const result = await extApi.runtime.agent.chat({
-                message: options.message,
-                conversationId: options.conversationId || 'webhook-default',
+            api.logger.info('Using channel dispatch pattern');
+
+            let responseText = '';
+
+            await runtime.channel.reply.dispatchReplyWithBufferedBlockDispatcher({
+                ctx: {
+                    Body: options.message,
+                    RawBody: options.message,
+                    From: `webhook:${options.conversationId || 'default'}`,
+                    To: 'webhook:agent',
+                    SessionKey: options.conversationId || 'webhook-default',
+                    Provider: 'webhook',
+                    Surface: 'webhook',
+                },
+                cfg: (pluginConfig || {}) as Record<string, unknown>,
+                dispatcherOptions: {
+                    deliver: async (payload) => {
+                        responseText += payload.text || '';
+                    },
+                    onError: (err, info) => {
+                        api.logger.error(`Dispatch error (${info.kind}): ${err}`);
+                    },
+                },
             });
+
             return {
-                text: result.text || 'No response',
-                model: result.model,
+                text: responseText || 'No response',
             };
         } catch (error) {
-            api.logger.warn(`api.runtime.agent.chat failed: ${error}`);
+            api.logger.warn(`Channel dispatch failed: ${error}`);
         }
     }
 
-    // Method 3: Try api.callRpc if available
-    if (extApi.callRpc && typeof extApi.callRpc === 'function') {
-        try {
-            api.logger.info('Using api.callRpc method');
-            const result = await extApi.callRpc('chat.send', {
-                message: options.message,
-                conversationId: options.conversationId || 'webhook-default',
-                metadata: options.metadata,
-            }) as { text: string; model?: string };
-            return {
-                text: result.text || 'No response',
-                model: result.model,
-            };
-        } catch (error) {
-            api.logger.warn(`api.callRpc failed: ${error}`);
-        }
-    }
-
-    // Log all available methods for debugging
+    // Log detailed structure for debugging
     const apiMethods = Object.entries(api).map(([key, value]) => {
         const type = typeof value;
         return `${key}: ${type}`;
