@@ -15,6 +15,7 @@ import {
 import axios from 'axios';
 import { IncomingMessage, ServerResponse } from 'http';
 import { setRuntime, getRuntime } from './runtime.js';
+import { z } from 'zod';
 
 // --- Types ---
 
@@ -243,7 +244,16 @@ const wechatPlugin: ChannelPlugin<any> = {
         description: 'WeChat integration via Bridge Webhook',
         docsPath: '',
     },
-    configSchema: buildChannelConfigSchema({}), // Define specific schema if needed
+    configSchema: buildChannelConfigSchema(
+        z.object({
+            webhookUrl: z.string().optional(),
+        }).extend({
+            accounts: z.object({}).catchall(z.object({
+                webhookUrl: z.string().optional(),
+            })).optional(),
+            defaultAccount: z.string().optional()
+        })
+    ),
     capabilities: {
         chatTypes: ['direct'], // Webhook acts like DM usually
         media: false, // Set to true if supported
