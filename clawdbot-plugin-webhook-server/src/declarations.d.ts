@@ -27,6 +27,8 @@ declare module 'clawdbot/plugin-sdk' {
                 resolveAgentRoute?: (params: any) => { sessionKey: string; agentId?: string; accountId?: string };
             };
             reply?: {
+                resolveEnvelopeFormatOptions?: (cfg: any) => any;
+                formatAgentEnvelope?: (params: any) => string;
                 finalizeInboundContext?: (params: any) => any;
                 dispatchReplyWithBufferedBlockDispatcher?: (params: {
                     ctx: any;
@@ -38,6 +40,7 @@ declare module 'clawdbot/plugin-sdk' {
                 }) => Promise<void>;
             };
             session?: {
+                readSessionUpdatedAt?: (params: any) => number | undefined;
                 resolveStorePath?: (store: any, params: { agentId?: string }) => string;
                 recordInboundSession?: (params: any) => Promise<void>;
             };

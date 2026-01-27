@@ -43,6 +43,30 @@ interface WebhookPayload {
 
 type CoreRuntime = PluginRuntime;
 
+declare module 'clawdbot/plugin-sdk' {
+    export interface PluginRuntime {
+        // ... (existing definitions)
+        channel: {
+            routing?: {
+                resolveAgentRoute?: (params: any) => { sessionKey: string; agentId?: string; accountId?: string };
+            };
+            reply?: {
+                resolveEnvelopeFormatOptions?: (cfg: any) => any;
+                formatAgentEnvelope?: (params: any) => string;
+                finalizeInboundContext?: (params: any) => any;
+                dispatchReplyWithBufferedBlockDispatcher?: (params: any) => Promise<void>;
+            };
+            session?: {
+                readSessionUpdatedAt?: (params: any) => number | undefined;
+                resolveStorePath?: (store: any, params: { agentId?: string }) => string;
+                recordInboundSession?: (params: any) => Promise<void>;
+            };
+            [key: string]: unknown;
+        };
+    }
+}
+
+
 // --- Webhook Handler ---
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
@@ -148,21 +172,33 @@ async function processMessageWithPipeline(payload: WebhookPayload) {
         return;
     }
 
-    const sessionKey = route.sessionKey || `wechat:${senderId}`;
+    // Construct ids
+    const fromLabel = `wechat:${senderId}`;
 
-    // Construct Context
-    // We need to pass the callback_url through to the delivery phase.
-    // We can use the 'Ctx' fields or `Originating...` fields if they allow custom data,
-    // or rely on `InboundContext` having flexible fields.
-    const callbackUrl = payload.callback_url;
+    // Get Store Path (using config.session?.store if available)
+    // We try to access config.session from the global config
+    const storePath = core.channel.session?.resolveStorePath?.(config.session?.store, { agentId: route.agentId });
 
-    // We can embed the callback URL in the `From` or a custom property if the SDK allows.
-    // Or we keep a transient map.
-    // Let's use a Custom property in `ctxPayload` if the type allows arbitrary strings.
-    // `finalizeInboundContext` typically returns a record.
+    // Format Envelope
+    const envelopeOptions = core.channel.reply?.resolveEnvelopeFormatOptions?.(config);
+    const previousTimestamp = core.channel.session?.readSessionUpdatedAt?.({
+        storePath,
+        sessionKey
+    });
+
+    const timestamp = payload.metadata?.timestamp ? payload.metadata.timestamp * 1000 : Date.now();
+
+    const formattedBody = core.channel.reply?.formatAgentEnvelope?.({
+        channel: 'WeChat',
+        from: senderName, // User friendly name
+        timestamp,
+        previousTimestamp,
+        envelope: envelopeOptions,
+        body: text
+    }) || text; // Fallback to raw text if formatter missing
 
     const ctxPayload = core.channel.reply?.finalizeInboundContext?.({
-        Body: text,
+        Body: formattedBody,
         RawBody: text,
         From: `wechat:${senderId}`,
         To: `wechat:bot`,
@@ -181,7 +217,6 @@ async function processMessageWithPipeline(payload: WebhookPayload) {
     if (!ctxPayload) return;
 
     // Record Session
-    const storePath = core.channel.session?.resolveStorePath?.(null, { agentId: route.agentId });
     await core.channel.session?.recordInboundSession?.({
         storePath,
         sessionKey,
