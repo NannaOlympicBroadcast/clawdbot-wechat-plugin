@@ -1,7 +1,7 @@
 {
     "id": "webhook-server",
     "name": "Webhook Server",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Exposes a webhook HTTP server for receiving external messages and triggering agent tasks",
     "author": "",
     "license": "MIT",
@@ -21,7 +21,7 @@
             },
             "authToken": {
                 "type": "string",
-                "description": "Authentication token for incoming requests (Bearer token)"
+                "description": "Authentication token for incoming requests (Bearer token). Auto-generated if not provided."
             },
             "timeout": {
                 "type": "number",
@@ -29,8 +29,31 @@
                 "description": "Maximum time (ms) to wait for agent task completion"
             }
         },
-        "required": [
-            "authToken"
-        ]
+        "required": []
+    },
+    "configDefaults": {
+        "port": 8765,
+        "host": "0.0.0.0",
+        "authToken": "$auto:uuid",
+        "timeout": 300000
+    },
+    "uiHints": {
+        "authToken": {
+            "label": "Auth Token",
+            "sensitive": true,
+            "placeholder": "Auto-generated secure token"
+        },
+        "port": {
+            "label": "Server Port",
+            "placeholder": "8765"
+        },
+        "host": {
+            "label": "Bind Host",
+            "placeholder": "0.0.0.0"
+        },
+        "timeout": {
+            "label": "Task Timeout (ms)",
+            "placeholder": "300000"
+        }
     }
 }

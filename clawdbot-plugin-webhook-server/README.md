@@ -20,11 +20,23 @@ plugins:
     webhook-server:
       enabled: true
       config:
-        port: 8765
-        host: 0.0.0.0
-        authToken: your-secret-token-here
-        timeout: 300000  # 5 minutes
+        port: 8765              # Optional, default: 8765
+        host: 0.0.0.0           # Optional, default: 0.0.0.0
+        authToken: your-token   # Optional, auto-generated if not provided
+        timeout: 300000         # Optional, default: 300000 (5 minutes)
 ```
+
+### Auto-generated Auth Token
+
+If `authToken` is not provided in the config, the plugin will **automatically generate a secure token** on first run and log it to the console:
+
+```
+[webhook-server] Auto-generated authToken: wh_a1b2c3d4e5f6...
+[webhook-server] ⚠️  Save this token to your config.yaml to persist it:
+    plugins.entries.webhook-server.config.authToken: "wh_a1b2c3d4e5f6..."
+```
+
+> **Note**: The auto-generated token changes on each restart unless you save it to your config. For production, always persist the token.
 
 ## API Endpoints
 

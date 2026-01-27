@@ -8,6 +8,7 @@
 
 import Fastify, { FastifyInstance } from 'fastify';
 import axios from 'axios';
+import crypto from 'crypto';
 
 // Types for Clawdbot plugin API
 interface ClawdbotPluginApi {
@@ -120,19 +121,42 @@ interface CallbackPayload {
 // Plugin state
 let server: FastifyInstance | null = null;
 let pluginApi: ClawdbotPluginApi | null = null;
+let generatedAuthToken: string | null = null;
 
 /**
- * Get plugin config with defaults
+ * Generate a secure auth token
+ */
+function generateSecureToken(): string {
+    // Generate a secure random token using UUID v4 format
+    return `wh_${crypto.randomUUID().replace(/-/g, '')}`;
+}
+
+/**
+ * Get plugin config with defaults. Auto-generates authToken if not provided.
  */
 function getPluginConfig(api: ClawdbotPluginApi): Required<WebhookServerConfig> {
     const config = api.config.plugins?.entries?.['webhook-server']?.config || {};
+
+    // Handle authToken - auto-generate if missing or placeholder
+    let authToken = config.authToken ?? '';
+    if (!authToken || authToken.startsWith('$auto:')) {
+        if (!generatedAuthToken) {
+            generatedAuthToken = generateSecureToken();
+            api.logger.info(`[webhook-server] Auto-generated authToken: ${generatedAuthToken}`);
+            api.logger.info(`[webhook-server] ⚠️  Save this token to your config.yaml to persist it:`);
+            api.logger.info(`    plugins.entries.webhook-server.config.authToken: "${generatedAuthToken}"`);
+        }
+        authToken = generatedAuthToken;
+    }
+
     return {
         port: config.port ?? 8765,
         host: config.host ?? '0.0.0.0',
-        authToken: config.authToken ?? '',
+        authToken,
         timeout: config.timeout ?? 300000, // 5 minutes default
     };
 }
+
 
 /**
  * Process a webhook task and send result to callback URL
@@ -282,12 +306,10 @@ function createServer(api: ClawdbotPluginApi): FastifyInstance {
 export default function register(api: ClawdbotPluginApi): void {
     pluginApi = api;
 
+    // Get config (this will auto-generate authToken if needed)
     const config = getPluginConfig(api);
 
-    // Validate required config
-    if (!config.authToken) {
-        api.logger.warn('webhook-server: No authToken configured. Set plugins.entries.webhook-server.config.authToken');
-    }
+    api.logger.info(`[webhook-server] Configured - Port: ${config.port}, Host: ${config.host}`);
 
     // Register background service
     api.registerService({
