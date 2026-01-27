@@ -192,14 +192,14 @@ async function processMessageWithPipeline(payload: WebhookPayload) {
         ctx: ctxPayload,
         cfg: config,
         dispatcherOptions: {
-            deliver: async (deliverPayload) => {
+            deliver: async (deliverPayload: { text?: string }) => {
                 await deliverWeChatReply({
                     text: deliverPayload.text,
                     callbackUrl: callbackUrl || (_globalConfig?.channels?.wechat?.config?.callbackUrl),
                     originalPayload: payload
                 });
             },
-            onError: (err, info) => {
+            onError: (err: unknown, info: { kind: string }) => {
                 console.error(`WeChat dispatch error (${info.kind}):`, err);
             }
         }
@@ -254,7 +254,7 @@ const wechatPlugin: ChannelPlugin<any> = {
     config: {
         // Minimal config helpers
         listAccountIds: () => [DEFAULT_ACCOUNT_ID],
-        resolveAccount: (cfg) => ({
+        resolveAccount: (cfg: any) => ({
             accountId: DEFAULT_ACCOUNT_ID,
             name: 'Default',
             enabled: true,
