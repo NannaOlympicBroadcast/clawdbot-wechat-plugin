@@ -19,15 +19,15 @@ interface ClawdbotPluginApi {
         debug: (msg: string, ...args: unknown[]) => void;
     };
     config: PluginConfig;
-    // Call Gateway RPC methods
-    callRpc: (method: string, params: Record<string, unknown>) => Promise<unknown>;
-    // Chat API for sending messages to agent
-    chat: {
+    // Chat API for sending messages to agent (may not exist in all versions)
+    chat?: {
         send: (options: ChatSendOptions) => Promise<ChatSendResult>;
     };
     registerService: (service: BackgroundService) => void;
     registerCommand: (command: PluginCommand) => void;
     registerGatewayMethod: (name: string, handler: (ctx: RpcContext) => void) => void;
+    // Allow additional unknown properties
+    [key: string]: unknown;
 }
 
 interface PluginConfig {
@@ -230,8 +230,20 @@ interface ChatRpcResult {
 }
 
 /**
- * Call Clawdbot's agent via Gateway RPC
- * Uses the plugin API's callRpc method to invoke the agent
+ * Extended API type to handle dynamic properties
+ */
+type ExtendedPluginApi = ClawdbotPluginApi & {
+    runtime?: {
+        agent?: {
+            chat?: (options: { message: string; conversationId?: string }) => Promise<{ text: string; model?: string }>;
+        };
+    };
+    callRpc?: (method: string, params: Record<string, unknown>) => Promise<unknown>;
+};
+
+/**
+ * Call Clawdbot's agent via available API methods
+ * Tries multiple approaches in order of preference
  */
 async function callChatRpc(
     api: ClawdbotPluginApi,
@@ -241,48 +253,72 @@ async function callChatRpc(
         metadata?: Record<string, unknown>;
     }
 ): Promise<ChatRpcResult> {
-    try {
-        api.logger.info(`Sending message to agent: ${options.message.slice(0, 50)}...`);
+    const extApi = api as ExtendedPluginApi;
 
-        // Use Gateway RPC to send message to agent
-        const result = await api.callRpc('chat.send', {
-            message: options.message,
-            conversationId: options.conversationId || 'webhook-default',
-            metadata: options.metadata,
-        }) as { text: string; model?: string };
+    api.logger.info(`Sending message to agent: ${options.message.slice(0, 50)}...`);
+    api.logger.debug(`Available API methods: ${Object.keys(api).join(', ')}`);
 
-        api.logger.info(`Agent responded with ${result.text?.length || 0} chars`);
-
-        return {
-            text: result.text || 'No response from agent',
-            model: result.model,
-        };
-    } catch (error: unknown) {
-        const err = error as { message?: string; code?: string };
-        api.logger.error(`RPC chat.send failed: ${err.message || error}`);
-
-        // If chat.send doesn't exist, try alternative methods
-        if (err.code === 'METHOD_NOT_FOUND' || err.message?.includes('not found')) {
-            api.logger.warn('chat.send RPC not available, trying fallback...');
-            // Fallback: try agent.invoke if available
-            try {
-                const fallbackResult = await api.callRpc('agent.invoke', {
-                    input: options.message,
-                    sessionId: options.conversationId || 'webhook-default',
-                }) as { output: string; model?: string };
-
-                return {
-                    text: fallbackResult.output || 'No response',
-                    model: fallbackResult.model,
-                };
-            } catch (fallbackError) {
-                api.logger.error(`Fallback RPC also failed: ${fallbackError}`);
-                throw error; // Throw original error
-            }
+    // Method 1: Try api.chat.send if available
+    if (api.chat && typeof api.chat.send === 'function') {
+        try {
+            api.logger.info('Using api.chat.send method');
+            const result = await api.chat.send({
+                message: options.message,
+                conversationId: options.conversationId || 'webhook-default',
+                metadata: options.metadata,
+            });
+            return {
+                text: result.text || 'No response',
+                model: result.metadata?.model,
+            };
+        } catch (error) {
+            api.logger.warn(`api.chat.send failed: ${error}`);
         }
-
-        throw error;
     }
+
+    // Method 2: Try api.runtime.agent.chat if available
+    if (extApi.runtime?.agent?.chat && typeof extApi.runtime.agent.chat === 'function') {
+        try {
+            api.logger.info('Using api.runtime.agent.chat method');
+            const result = await extApi.runtime.agent.chat({
+                message: options.message,
+                conversationId: options.conversationId || 'webhook-default',
+            });
+            return {
+                text: result.text || 'No response',
+                model: result.model,
+            };
+        } catch (error) {
+            api.logger.warn(`api.runtime.agent.chat failed: ${error}`);
+        }
+    }
+
+    // Method 3: Try api.callRpc if available
+    if (extApi.callRpc && typeof extApi.callRpc === 'function') {
+        try {
+            api.logger.info('Using api.callRpc method');
+            const result = await extApi.callRpc('chat.send', {
+                message: options.message,
+                conversationId: options.conversationId || 'webhook-default',
+                metadata: options.metadata,
+            }) as { text: string; model?: string };
+            return {
+                text: result.text || 'No response',
+                model: result.model,
+            };
+        } catch (error) {
+            api.logger.warn(`api.callRpc failed: ${error}`);
+        }
+    }
+
+    // Log all available methods for debugging
+    const apiMethods = Object.entries(api).map(([key, value]) => {
+        const type = typeof value;
+        return `${key}: ${type}`;
+    }).join(', ');
+    api.logger.error(`No chat method available! API structure: ${apiMethods}`);
+
+    throw new Error('No chat method available in Clawdbot Plugin API. Check plugin compatibility.');
 }
 
 
