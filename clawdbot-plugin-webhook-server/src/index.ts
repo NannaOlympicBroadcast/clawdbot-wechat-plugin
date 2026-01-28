@@ -16,6 +16,7 @@ import axios from 'axios';
 import { IncomingMessage, ServerResponse } from 'http';
 import { setRuntime, getRuntime } from './runtime.js';
 import { z } from 'zod';
+import ngrok from 'ngrok';
 
 // --- Types ---
 
@@ -331,6 +332,27 @@ export default {
     register(api: ClawdbotPluginApi) {
         setRuntime(api.runtime);
         _globalConfig = api.config;
+
+        const webhookConfig = api.config.plugins?.entries?.['webhook-server']?.config || {};
+        if (webhookConfig.useNgrok) {
+            const port = webhookConfig.ngrokPort || 8765;
+            const authtoken = webhookConfig.ngrokAuthToken;
+            const region = webhookConfig.ngrokRegion;
+
+            (async () => {
+                try {
+                    api.logger.info(`Starting ngrok tunnel on port ${port}...`);
+                    const url = await ngrok.connect({
+                        addr: port,
+                        authtoken,
+                        region
+                    });
+                    api.logger.info(`Ngrok tunnel established: ${url}`);
+                } catch (err: unknown) {
+                    api.logger.error(`Failed to start ngrok: ${err instanceof Error ? err.message : String(err)}`);
+                }
+            })();
+        }
 
         // Register as a channel
         api.registerChannel({

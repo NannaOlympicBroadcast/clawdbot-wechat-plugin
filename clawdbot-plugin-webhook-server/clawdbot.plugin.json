@@ -32,6 +32,24 @@
                 "type": "string",
                 "default": "default",
                 "description": "Agent ID to use for processing messages (e.g., 'default', 'main')"
+            },
+            "useNgrok": {
+                "type": "boolean",
+                "default": false,
+                "description": "Enable ngrok tunnel on startup"
+            },
+            "ngrokAuthToken": {
+                "type": "string",
+                "description": "Ngrok authtoken"
+            },
+            "ngrokPort": {
+                "type": "number",
+                "default": 8765,
+                "description": "Port to tunnel (default: 8765)"
+            },
+            "ngrokRegion": {
+                "type": "string",
+                "description": "Ngrok region (us, eu, au, ap, sa, jp, in)"
             }
         },
         "required": []
@@ -41,7 +59,9 @@
         "host": "0.0.0.0",
         "authToken": "$auto:uuid",
         "timeout": 300000,
-        "agentId": "default"
+        "agentId": "default",
+        "useNgrok": false,
+        "ngrokPort": 8765
     },
     "uiHints": {
         "authToken": {
@@ -60,6 +80,18 @@
         "timeout": {
             "label": "Task Timeout (ms)",
             "placeholder": "300000"
+        },
+        "useNgrok": {
+            "label": "Enable Ngrok"
+        },
+        "ngrokAuthToken": {
+            "label": "Ngrok AuthToken",
+            "sensitive": true,
+            "placeholder": "Your ngrok authtoken"
+        },
+        "ngrokPort": {
+            "label": "Ngrok Tunnel Port",
+            "placeholder": "8765"
         }
     }
 }
