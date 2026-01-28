@@ -1,7 +1,7 @@
 {
     "id": "webhook-server",
     "name": "Webhook Server",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "description": "Exposes a webhook HTTP server for receiving external messages and triggering agent tasks",
     "author": "",
     "license": "MIT",
