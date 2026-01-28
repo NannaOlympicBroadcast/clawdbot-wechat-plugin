@@ -18,35 +18,44 @@ clawdbot plugins install @haiyanfengli-llc/webhook-server
 
 ## ⚙️ Configuration
 
-Add the following configuration to your Clawdbot `config.yaml`:
+Add the following configuration to your Clawdbot `clawdbot.json`:
 
-```yaml
-channels:
-  wechat:
-    enabled: true
-    config:
-      # Optional: Explicitly set the callback URL if auto-detection fails
-      # callbackUrl: "http://<bridge-host>:3000/callback"
-
-plugins:
-  entries:
-    webhook-server:
-      enabled: true
-      config:
-        # Ngrok Integration
-        useNgrok: false           # Set to true to enable
-        ngrokAuthToken: "..."     # Your ngrok authtoken
-        ngrokPort: 18789          # Port to tunnel (should match Clawdbot port)
-        ngrokRegion: "us"         # Ngrok region (us, eu, ap, etc.)
+```json
+{
+  "channels": {
+    "wechat": {
+      "enabled": true,
+      "config": {
+        "callbackUrl": "http://<bridge-host>:3000/callback"
+      }
+    }
+  },
+  "plugins": {
+    "entries": {
+      "webhook-server": {
+        "enabled": true,
+        "config": {
+          "useNgrok": false,
+          "ngrokAuthToken": "...",
+          "ngrokPort": 18789,
+          "ngrokRegion": "us"
+        }
+      }
+    }
+  }
+}
 ```
+*Note: `callbackUrl` is optional. `ngrokAuthToken` is optional if `NGROK_AUTHTOKEN` env var is set.*
 
 ### Ngrok Integration
 
 This plugin has built-in support for [ngrok](https://ngrok.com/) to expose your local server to the internet. This is useful for development or self-hosted environments without a public IP.
 
 1.  Sign up for an ngrok account and get your Authtoken.
-2.  Set `useNgrok: true` and `ngrokAuthToken` in your configuration.
-3.  Check the logs on startup for the generated public URL.
+2.  Set `useNgrok: true` in your configuration.
+3.  Provide the authtoken via `NGROK_AUTHTOKEN` environment variable (Recommended) or `ngrokAuthToken` in config.
+    *   **Note:** The `NGROK_AUTHTOKEN` environment variable takes precedence over the configuration file.
+4.  Check the logs on startup for the generated public URL.
 
 
 ## 🔗 Architecture

@@ -34,16 +34,23 @@ clawdbot plugins install -l ./clawdbot-plugin-webhook-server
 
 ### 2. 配置插件
 
-编辑 Clawdbot 配置文件 (`config.yaml`)，启用微信频道：
 
-```yaml
-channels:
-  wechat:
-    enabled: true
-    config:
-      # 可选：如果您的 Bridge 无法自动识别回调地址，可以在此手动指定
-      # callbackUrl: "http://your-bridge-host:3000/callback"
+
+编辑 Clawdbot 配置文件 (`clawdbot.json`)，启用微信频道：
+
+```json
+{
+  "channels": {
+    "wechat": {
+      "enabled": true,
+      "config": {
+        "callbackUrl": "http://your-bridge-host:3000/callback" 
+      }
+    }
+  }
+}
 ```
+*注意：`callbackUrl` 为可选配置，如果您的 Bridge 无法自动识别回调地址，可以在此手动指定。*
 
 ### 2.5 (可选) 启用 Ngrok 内网穿透
 
@@ -51,17 +58,24 @@ channels:
 
 在 `plugins` 配置中启用：
 
-```yaml
-plugins:
-  entries:
-    webhook-server:
-      enabled: true
-      config:
-        useNgrok: true
-        ngrokAuthToken: "您的_NGROK_AUTHTOKEN" # 必填
-        ngrokPort: 18789 # 需与 Clawdbot 端口一致
-        ngrokRegion: "us" # 可选，默认为 us
+```json
+{
+  "plugins": {
+    "entries": {
+      "webhook-server": {
+        "enabled": true,
+        "config": {
+          "useNgrok": true,
+          "ngrokAuthToken": "您的_NGROK_AUTHTOKEN", 
+          "ngrokPort": 18789,
+          "ngrokRegion": "us"
+        }
+      }
+    }
+  }
+}
 ```
+*注意：`ngrokAuthToken` 可选，优先读取系统环境变量 `NGROK_AUTHTOKEN`。`ngrokPort` 需与 Clawdbot 端口一致。*
 
 启用后，Clawdbot 启动时会在日志中输出生成的公网 URL，请使用该 URL 进行绑定。
 ```
