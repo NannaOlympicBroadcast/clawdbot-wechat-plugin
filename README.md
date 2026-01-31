@@ -22,6 +22,62 @@ Clawdbot 的微信公众号连接套件。支持通过微信公众号与 Clawdbo
 
 如果您是 Clawdbot 的使用者，希望让自己的智能体接入微信，请按照以下步骤操作：
 
+### Windows 用户快速安装 (推荐)
+
+> [!TIP]
+> **一键安装脚本**
+> 我们提供了自动化安装脚本，可以在 WSL (Windows Subsystem for Linux) 中自动安装 Clawdbot 和微信插件，解决 Windows 兼容性问题。
+
+#### 系统要求
+- Windows 10 版本 2004 (build 19041) 或更高版本，或 Windows 11
+- 管理员权限 (用于安装 WSL)
+- 至少 4GB 可用磁盘空间
+
+#### 快速开始
+
+在 PowerShell 中运行以下命令：
+
+```powershell
+# 下载并运行安装脚本
+iwr -useb https://cpilot.net/downloads/install-wsl.ps1 | iex
+
+# 或者下载后手动运行
+powershell -ExecutionPolicy Bypass -File install-wsl.ps1
+```
+
+脚本将自动：
+1. 检测并安装 WSL 2 (如果未安装)
+2. 安装 Ubuntu 发行版
+3. 在 WSL 中安装 Node.js 22、Clawdbot 和微信插件
+4. 配置并启动 ngrok 内网穿透
+5. 显示绑定命令
+
+安装完成后，按照提示在微信公众号中发送绑定命令即可。
+
+#### 环境变量配置 (可选)
+
+```powershell
+# 自定义端口
+$env:CLAWDBOT_PORT=18789
+
+# 预设 ngrok token
+$env:NGROK_AUTHTOKEN="your_ngrok_token"
+
+# 使用国内镜像加速
+$env:NPM_REGISTRY="https://registry.npmmirror.com"
+$env:GIT_MIRROR_PREFIX="https://ghfast.top/"
+
+# 自动确认所有提示
+$env:AUTO_Y=1
+
+# 然后运行安装脚本
+.\install-wsl.ps1
+```
+
+---
+
+### 手动安装 (Linux/macOS 或高级用户)
+
 ### 1. 安装插件
 
 在您的 Clawdbot 目录或工作区中安装此插件：
@@ -175,3 +231,46 @@ A: 在公众号发送 `unbind` 即可。
 
 **Q: 日志显示 ECONNREFUSED？**
 A: 通常是因为 Bridge 尝试连接的 Clawdbot 地址或端口不正确。请确保 `bind` 指令中使用的是 Clawdbot 实际监听的端口（如 8789 而不是旧版的 8765）。
+
+**Q: Windows WSL 安装相关问题**
+
+*Q: 如何查看 WSL 中的服务状态？*
+```powershell
+# 进入 WSL
+wsl -d Ubuntu
+
+# 查看 gateway 日志
+cat ~/.clawdbot-wechat/gateway.log
+
+# 查看 ngrok 日志
+cat ~/.clawdbot-wechat/ngrok.log
+```
+
+*Q: 如何重启 WSL 中的服务？*
+```bash
+# 在 WSL 中执行
+pkill -f "clawdbot gateway"
+pkill ngrok
+
+# 重新启动
+nohup clawdbot gateway > ~/.clawdbot-wechat/gateway.log 2>&1 &
+nohup ngrok http 18789 > ~/.clawdbot-wechat/ngrok.log 2>&1 &
+```
+
+*Q: WSL 安装失败或需要重启？*
+A: WSL 首次安装可能需要重启系统。重启后重新运行 `install-wsl.ps1` 即可继续安装。
+
+*Q: 如何完全卸载 WSL 安装？*
+```powershell
+# 卸载 Ubuntu 发行版
+wsl --unregister Ubuntu
+
+# 如需完全移除 WSL
+wsl --uninstall
+```
+
+---
+
+## 📝 许可证
+
+MIT License
