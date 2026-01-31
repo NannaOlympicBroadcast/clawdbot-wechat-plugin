@@ -263,7 +263,8 @@ function Set-WSLVersion2([string]$Distro) {
 function Get-LinuxInstallScript {
   $ngrokToken = if ($env:NGROK_AUTHTOKEN) { $env:NGROK_AUTHTOKEN } else { "" }
   
-  return @"
+  # Use single quotes to avoid PowerShell variable expansion
+  $script = @'
 #!/bin/bash
 set -e
 
@@ -271,42 +272,42 @@ set -e
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-say() { echo -e "\${GREEN}==>\${NC} \$1"; }
-warn() { echo -e "\${YELLOW}[warn]\${NC} \$1"; }
-err() { echo -e "\${RED}[error]\${NC} \$1"; }
-die() { err "\$1"; exit 1; }
+say() { echo -e "${GREEN}==>${NC} $1"; }
+warn() { echo -e "${YELLOW}[warn]${NC} $1"; }
+err() { echo -e "${RED}[error]${NC} $1"; }
+die() { err "$1"; exit 1; }
 
 # Config
-PORT=$PORT
-NPM_REGISTRY="$NPM_REGISTRY"
-PLUGIN_GIT_REPO="$PLUGIN_GIT_REPO"
-GIT_MIRROR_PREFIX="$GIT_MIRROR_PREFIX"
-NGROK_AUTHTOKEN="$ngrokToken"
+PORT=__PORT__
+NPM_REGISTRY="__NPM_REGISTRY__"
+PLUGIN_GIT_REPO="__PLUGIN_GIT_REPO__"
+GIT_MIRROR_PREFIX="__GIT_MIRROR_PREFIX__"
+NGROK_AUTHTOKEN="__NGROK_AUTHTOKEN__"
 
-USER_HOME=\$HOME
-BASE_DIR="\$USER_HOME/.clawdbot-wechat"
-SRC_DIR="\$BASE_DIR/src"
-LOG_DIR="\$BASE_DIR"
-CLAWDBOT_CONFIG="\$USER_HOME/.clawdbot/clawdbot.json"
+USER_HOME=$HOME
+BASE_DIR="$USER_HOME/.clawdbot-wechat"
+SRC_DIR="$BASE_DIR/src"
+LOG_DIR="$BASE_DIR"
+CLAWDBOT_CONFIG="$USER_HOME/.clawdbot/clawdbot.json"
 
-mkdir -p "\$LOG_DIR"
-mkdir -p "\$SRC_DIR"
+mkdir -p "$LOG_DIR"
+mkdir -p "$SRC_DIR"
 
 # ------------------ System preparation ------------------
 say "更新系统包列表..."
 sudo apt-get update -qq
 
 say "安装必要的依赖..."
-sudo apt-get install -y curl git build-essential ca-certificates gnupg
+sudo apt-get install -y curl git build-essential ca-certificates gnupg jq netcat-openbsd
 
 # ------------------ Node.js installation ------------------
 say "检查 Node.js 版本..."
 if command -v node &> /dev/null; then
-  NODE_VERSION=\$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
-  if [ "\$NODE_VERSION" -ge 22 ]; then
-    say "Node.js \$(node -v) 已安装"
+  NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
+  if [ "$NODE_VERSION" -ge 22 ]; then
+    say "Node.js $(node -v) 已安装"
   else
     say "Node.js 版本过低，需要升级到 22+"
     NODE_VERSION=0
@@ -315,23 +316,18 @@ else
   NODE_VERSION=0
 fi
 
-if [ "\$NODE_VERSION" -lt 22 ]; then
+if [ "$NODE_VERSION" -lt 22 ]; then
   say "安装 Node.js 22 LTS..."
-  
-  # Remove old Node.js if exists
   sudo apt-get remove -y nodejs npm 2>/dev/null || true
-  
-  # Install Node.js 22 via NodeSource
   curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
   sudo apt-get install -y nodejs
-  
-  say "Node.js \$(node -v) 安装完成"
-  say "npm \$(npm -v) 安装完成"
+  say "Node.js $(node -v) 安装完成"
+  say "npm $(npm -v) 安装完成"
 fi
 
 # ------------------ npm configuration ------------------
-say "配置 npm registry: \$NPM_REGISTRY"
-npm config set registry "\$NPM_REGISTRY"
+say "配置 npm registry: $NPM_REGISTRY"
+npm config set registry "$NPM_REGISTRY"
 npm config set fund false
 npm config set audit false
 
@@ -353,51 +349,48 @@ else
   die "未找到 clawdbot/moltbot 命令"
 fi
 
-say "使用 CLI: \$CLI"
+say "使用 CLI: $CLI"
 
 # ------------------ Plugin installation ------------------
 say "安装 WeChat webhook 插件..."
 
-REPO_DIR="\$SRC_DIR/clawdbot-wechat-plugin"
+REPO_DIR="$SRC_DIR/clawdbot-wechat-plugin"
 PLUGIN_SUBDIR="clawdbot-plugin-webhook-server"
 
-# Clone or update repository
-if [ -d "\$REPO_DIR" ]; then
+if [ -d "$REPO_DIR" ]; then
   say "源码目录已存在，执行 git pull..."
-  cd "\$REPO_DIR"
+  cd "$REPO_DIR"
   git pull --rebase || warn "git pull 失败，使用现有代码"
 else
   say "克隆插件仓库..."
-  
-  # Try mirrors
   CLONE_SUCCESS=0
-  if [ -n "\$GIT_MIRROR_PREFIX" ]; then
-    MIRROR_URL="\${GIT_MIRROR_PREFIX}\${PLUGIN_GIT_REPO}"
-    say "尝试镜像: \$MIRROR_URL"
-    if git clone --depth 1 "\$MIRROR_URL" "\$REPO_DIR" 2>/dev/null; then
+  if [ -n "$GIT_MIRROR_PREFIX" ]; then
+    MIRROR_URL="${GIT_MIRROR_PREFIX}${PLUGIN_GIT_REPO}"
+    say "尝试镜像: $MIRROR_URL"
+    if git clone --depth 1 "$MIRROR_URL" "$REPO_DIR" 2>/dev/null; then
       CLONE_SUCCESS=1
     fi
   fi
   
-  if [ \$CLONE_SUCCESS -eq 0 ]; then
-    say "尝试原始仓库: \$PLUGIN_GIT_REPO"
-    git clone --depth 1 "\$PLUGIN_GIT_REPO" "\$REPO_DIR" || die "git clone 失败"
+  if [ $CLONE_SUCCESS -eq 0 ]; then
+    say "尝试原始仓库: $PLUGIN_GIT_REPO"
+    git clone --depth 1 "$PLUGIN_GIT_REPO" "$REPO_DIR" || die "git clone 失败"
   fi
 fi
 
-PLUGIN_DIR="\$REPO_DIR/\$PLUGIN_SUBDIR"
-[ -d "\$PLUGIN_DIR" ] || die "未找到插件目录: \$PLUGIN_SUBDIR"
+PLUGIN_DIR="$REPO_DIR/$PLUGIN_SUBDIR"
+[ -d "$PLUGIN_DIR" ] || die "未找到插件目录: $PLUGIN_SUBDIR"
 
 say "构建插件..."
-cd "\$PLUGIN_DIR"
+cd "$PLUGIN_DIR"
 npm install --no-fund --no-audit
 npm run build
 
 [ -f "dist/index.js" ] || die "构建失败：未找到 dist/index.js"
 
 say "安装插件到 Clawdbot..."
-\$CLI plugins install -l "\$PLUGIN_DIR"
-\$CLI plugins enable webhook-server
+$CLI plugins install -l "$PLUGIN_DIR"
+$CLI plugins enable webhook-server
 
 # ------------------ ngrok installation ------------------
 say "安装 ngrok..."
@@ -405,38 +398,35 @@ say "安装 ngrok..."
 if command -v ngrok &> /dev/null; then
   say "ngrok 已安装"
 else
-  ARCH=\$(uname -m)
-  if [ "\$ARCH" = "x86_64" ]; then
+  ARCH=$(uname -m)
+  if [ "$ARCH" = "x86_64" ]; then
     NGROK_ARCH="amd64"
-  elif [ "\$ARCH" = "aarch64" ]; then
+  elif [ "$ARCH" = "aarch64" ]; then
     NGROK_ARCH="arm64"
   else
     NGROK_ARCH="386"
   fi
   
-  NGROK_URL="https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-\${NGROK_ARCH}.tgz"
-  
-  say "下载 ngrok: \$NGROK_URL"
-  curl -fsSL "\$NGROK_URL" -o /tmp/ngrok.tgz
-  
+  NGROK_URL="https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-${NGROK_ARCH}.tgz"
+  say "下载 ngrok: $NGROK_URL"
+  curl -fsSL "$NGROK_URL" -o /tmp/ngrok.tgz
   sudo tar xzf /tmp/ngrok.tgz -C /usr/local/bin
   rm /tmp/ngrok.tgz
-  
-  say "ngrok 安装完成: \$(ngrok version)"
+  say "ngrok 安装完成: $(ngrok version)"
 fi
 
 # Configure ngrok token
-if [ -n "\$NGROK_AUTHTOKEN" ]; then
+if [ -n "$NGROK_AUTHTOKEN" ]; then
   say "配置 ngrok authtoken..."
-  ngrok config add-authtoken "\$NGROK_AUTHTOKEN"
+  ngrok config add-authtoken "$NGROK_AUTHTOKEN"
 else
   if ! ngrok config check &>/dev/null; then
     warn "未配置 ngrok authtoken"
     echo ""
     echo "请访问 https://dashboard.ngrok.com/get-started/your-authtoken 获取 token"
     read -p "请输入 ngrok authtoken: " NGROK_AUTHTOKEN
-    if [ -n "\$NGROK_AUTHTOKEN" ]; then
-      ngrok config add-authtoken "\$NGROK_AUTHTOKEN"
+    if [ -n "$NGROK_AUTHTOKEN" ]; then
+      ngrok config add-authtoken "$NGROK_AUTHTOKEN"
     else
       warn "未配置 ngrok token，稍后需要手动配置"
     fi
@@ -446,9 +436,9 @@ fi
 # ------------------ Onboarding ------------------
 say "执行 Clawdbot onboard..."
 
-if [ -f "\$CLAWDBOT_CONFIG" ]; then
-  LAST_RUN=\$(jq -r '.wizard.lastRunAt // empty' "\$CLAWDBOT_CONFIG" 2>/dev/null || echo "")
-  if [ -n "\$LAST_RUN" ]; then
+if [ -f "$CLAWDBOT_CONFIG" ]; then
+  LAST_RUN=$(jq -r '.wizard.lastRunAt // empty' "$CLAWDBOT_CONFIG" 2>/dev/null || echo "")
+  if [ -n "$LAST_RUN" ]; then
     say "检测到已完成 onboard，跳过"
   else
     NEED_ONBOARD=1
@@ -457,40 +447,36 @@ else
   NEED_ONBOARD=1
 fi
 
-if [ "\${NEED_ONBOARD:-0}" = "1" ]; then
-  GW_TOKEN=\$(openssl rand -hex 24)
-  
-  \$CLI onboard \\
-    --accept-risk \\
-    --flow quickstart \\
-    --mode local \\
-    --gateway-port \$PORT \\
-    --gateway-bind loopback \\
-    --gateway-auth token \\
-    --gateway-token "\$GW_TOKEN" \\
-    --install-daemon \\
-    --skip-channels \\
-    --skip-skills \\
-    --skip-health \\
-    --skip-ui \\
+if [ "${NEED_ONBOARD:-0}" = "1" ]; then
+  GW_TOKEN=$(openssl rand -hex 24)
+  $CLI onboard \
+    --accept-risk \
+    --flow quickstart \
+    --mode local \
+    --gateway-port $PORT \
+    --gateway-bind loopback \
+    --gateway-auth token \
+    --gateway-token "$GW_TOKEN" \
+    --install-daemon \
+    --skip-channels \
+    --skip-skills \
+    --skip-health \
+    --skip-ui \
     --skip-daemon
 fi
 
 # ------------------ Start services ------------------
 say "启动 gateway..."
-
-# Kill existing gateway
-pkill -f "\$CLI gateway" 2>/dev/null || true
+pkill -f "$CLI gateway" 2>/dev/null || true
 sleep 2
 
-# Start gateway in background
-nohup \$CLI gateway > "\$LOG_DIR/gateway.log" 2>&1 &
-GATEWAY_PID=\$!
+nohup $CLI gateway > "$LOG_DIR/gateway.log" 2>&1 &
+GATEWAY_PID=$!
 
 say "等待 gateway 启动..."
 for i in {1..30}; do
-  if nc -z 127.0.0.1 \$PORT 2>/dev/null; then
-    say "Gateway 已启动 (PID: \$GATEWAY_PID)"
+  if nc -z 127.0.0.1 $PORT 2>/dev/null; then
+    say "Gateway 已启动 (PID: $GATEWAY_PID)"
     break
   fi
   sleep 1
@@ -498,14 +484,11 @@ done
 
 # ------------------ Start ngrok ------------------
 say "启动 ngrok..."
-
-# Kill existing ngrok
 pkill ngrok 2>/dev/null || true
 sleep 2
 
-# Start ngrok in background
-nohup ngrok http \$PORT --log=stdout > "\$LOG_DIR/ngrok.log" 2>&1 &
-NGROK_PID=\$!
+nohup ngrok http $PORT --log=stdout > "$LOG_DIR/ngrok.log" 2>&1 &
+NGROK_PID=$!
 
 say "等待 ngrok 启动..."
 sleep 5
@@ -513,15 +496,15 @@ sleep 5
 # Get ngrok public URL
 NGROK_URL=""
 for i in {1..20}; do
-  NGROK_URL=\$(curl -s http://127.0.0.1:4040/api/tunnels 2>/dev/null | jq -r '.tunnels[0].public_url // empty' 2>/dev/null || echo "")
-  if [ -n "\$NGROK_URL" ]; then
+  NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels 2>/dev/null | jq -r '.tunnels[0].public_url // empty' 2>/dev/null || echo "")
+  if [ -n "$NGROK_URL" ]; then
     break
   fi
   sleep 1
 done
 
 # Get gateway token
-GW_TOKEN=\$(jq -r '.gateway.auth.token // empty' "\$CLAWDBOT_CONFIG" 2>/dev/null || echo "")
+GW_TOKEN=$(jq -r '.gateway.auth.token // empty' "$CLAWDBOT_CONFIG" 2>/dev/null || echo "")
 
 # ------------------ Display results ------------------
 echo ""
@@ -530,10 +513,10 @@ echo "✅ 安装完成！"
 echo "========================================"
 echo ""
 
-if [ -n "\$NGROK_URL" ] && [ -n "\$GW_TOKEN" ]; then
+if [ -n "$NGROK_URL" ] && [ -n "$GW_TOKEN" ]; then
   echo "下一步：在 万格小智元 公众号中输入以下命令来绑定设备"
   echo ""
-  echo "  bind \$NGROK_URL \$GW_TOKEN"
+  echo "  bind $NGROK_URL $GW_TOKEN"
   echo ""
   echo "绑定后即可开始使用 Clawdbot 🎉"
 else
@@ -541,17 +524,26 @@ else
   echo ""
   echo "请手动获取："
   echo "  • ngrok URL: curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url'"
-  echo "  • Gateway Token: jq -r '.gateway.auth.token' \$CLAWDBOT_CONFIG"
+  echo "  • Gateway Token: jq -r '.gateway.auth.token' $CLAWDBOT_CONFIG"
 fi
 
 echo ""
 echo "日志文件："
-echo "  • Gateway: \$LOG_DIR/gateway.log"
-echo "  • ngrok: \$LOG_DIR/ngrok.log"
+echo "  • Gateway: $LOG_DIR/gateway.log"
+echo "  • ngrok: $LOG_DIR/ngrok.log"
 echo ""
 
 say "安装完成！祝使用愉快 ✨"
-"@
+'@
+  
+  # Replace placeholders with actual values
+  $script = $script.Replace('__PORT__', $PORT)
+  $script = $script.Replace('__NPM_REGISTRY__', $NPM_REGISTRY)
+  $script = $script.Replace('__PLUGIN_GIT_REPO__', $PLUGIN_GIT_REPO)
+  $script = $script.Replace('__GIT_MIRROR_PREFIX__', $GIT_MIRROR_PREFIX)
+  $script = $script.Replace('__NGROK_AUTHTOKEN__', $ngrokToken)
+  
+  return $script
 }
 
 # ------------------ Main execution ------------------
