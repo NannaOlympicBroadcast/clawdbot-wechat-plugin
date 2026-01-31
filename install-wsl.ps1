@@ -221,7 +221,7 @@ function Install-WSLDistro([string]$Distro) {
     return $true
   }
   
-  Say "安装 Ubuntu 发行版..."
+  Say "安装 Ubuntu 发行版...（请安装完成后在看到的Ubuntu终端输入'exit'并继续安装）"
   
   try {
     & wsl --install -d $Distro
@@ -301,6 +301,27 @@ sudo apt-get update -qq
 
 say "安装必要的依赖..."
 sudo apt-get install -y curl git build-essential ca-certificates gnupg jq netcat-openbsd
+
+# ------------------ UTF-8 and Chinese support ------------------
+say "配置 UTF-8 编码和中文支持..."
+sudo apt-get install -y language-pack-zh-hans fonts-noto-cjk locales
+
+# Generate UTF-8 locale
+sudo locale-gen zh_CN.UTF-8
+sudo locale-gen en_US.UTF-8
+
+# Set environment variables for current session
+export LANG=zh_CN.UTF-8
+export LC_ALL=zh_CN.UTF-8
+
+# Add to .bashrc for persistence
+if ! grep -q "LANG=zh_CN.UTF-8" "$HOME/.bashrc"; then
+  echo "" >> "$HOME/.bashrc"
+  echo "# UTF-8 encoding for Chinese support" >> "$HOME/.bashrc"
+  echo "export LANG=zh_CN.UTF-8" >> "$HOME/.bashrc"
+  echo "export LC_ALL=zh_CN.UTF-8" >> "$HOME/.bashrc"
+  say "已添加 UTF-8 编码配置到 ~/.bashrc"
+fi
 
 # ------------------ Node.js installation ------------------
 say "检查 Node.js 版本..."
